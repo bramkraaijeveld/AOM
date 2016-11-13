@@ -1,0 +1,18 @@
+﻿#pragma kernel Copy
+
+RWTexture2D<float> input;
+RWTexture2D<float> output;
+
+[numthreads(8,8,1)]
+void Copy (uint2 id : SV_DispatchThreadID){
+	output[id] = input[id];
+}
+
+#pragma kernel Init
+
+float value;
+
+[numthreads(8,8,1)]
+void Init (uint2 id : SV_DispatchThreadID){
+	output[id] = value;
+}
