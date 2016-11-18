@@ -24,6 +24,7 @@ public class TextureUtil {
 
 		if (value != 0){
 			int kernel = shader.FindKernel("Init");
+			shader.SetFloat("value", value);
 			shader.SetTexture(kernel, "output", texture);
 			shader.Dispatch(kernel, texture.width / 8, texture.height / 8, 1);
 		}

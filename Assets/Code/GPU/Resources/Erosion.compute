@@ -3,15 +3,12 @@ float g;
 float a;
 float l;
 
-int i;
-
-#pragma kernel Thermal
-
-float talus;
+int p;
 
 RWTexture2D<float> terrain;
 RWTexture2D<float> rock;
 RWTexture2D<float> soil;
+RWTexture2D<float> water;
 
 RWTexture2D<float> flux_l;
 RWTexture2D<float> flux_r;
@@ -19,37 +16,103 @@ RWTexture2D<float> flux_t;
 RWTexture2D<float> flux_b;
 
 
-[numthreads(8,8,1)]
-void Thermal (int2 id : SV_DispatchThreadID)
-{	
-	if (i==0){
-		// Calculate Outgoing Flux as float4(L,R,T,B)
+/*
+ * [-1, 1] [ 0, 1] [ 1, 1]
+ * [-1, 0] [ 0, 0] [ 1, 0]
+ * [-1,-1] [ 0,-1] [ 1,-1]
+*/
+
+#pragma kernel Hydraulic
+
+float rain;
+float evaporation;
+
+[numthreads(16,16,1)]
+void Hydraulic (int2 id : SV_DispatchThreadID)
+{
+	// Water incrementation due to rain or water sources
+	if (p==0){
+		water[id] += rain * dt;
+		terrain[id] = rock[id] + water[id];
+	}
+
+	// Flow simulation using shallow-water model.
+	// Computation of the velocity ﬁeld and water height changes
+	if (p==1){
 		float4 flux = float4(
-			max(0, flux_r[id] + dt * a * g * (terrain[id] - terrain[id + int2(-1,  0)]) / l),
 			max(0, flux_l[id] + dt * a * g * (terrain[id] - terrain[id + int2( 1,  0)]) / l),
+			max(0, flux_r[id] + dt * a * g * (terrain[id] - terrain[id + int2(-1,  0)]) / l),
 			max(0, flux_t[id] + dt * a * g * (terrain[id] - terrain[id + int2( 0,  1)]) / l),
 			max(0, flux_b[id] + dt * a * g * (terrain[id] - terrain[id + int2( 0, -1)]) / l)
 		);
-		
-		// Flux Cannot be more than Soil
-		float flux_total = flux.x + flux.y + flux.z + flux.w;
-		if (flux_total > soil[id]) flux = flux / flux_total * soil[id];
+
+		float flux_sum = flux.x + flux.y + flux.z + flux.w;
+		if (flux_sum > water[id]) flux = flux * water[id] / flux_sum;
 
 		flux_l[id] = flux.x;
 		flux_r[id] = flux.y;
 		flux_t[id] = flux.z;
 		flux_b[id] = flux.w;
 	}
-	if (i==1){
-		// Update Soil
+
+	if (p==2){
 		//	Outflow
-		soil[id] -= (flux_l[id] + flux_r[id] + flux_t[id] + flux_b[id]);
+		water[id] -= dt * (flux_l[id] + flux_r[id] + flux_t[id] + flux_b[id]);
 
 		//	Inflow
-		soil[id] += (flux_l[id + int2( 1,  0)] +
-					 flux_r[id + int2(-1,  0)] +
-					 flux_t[id + int2( 0, -1)] +
-					 flux_b[id + int2( 0,  1)]);
+		water[id] += dt * ((flux_l[id + int2(-1,  0)] +
+						    flux_r[id + int2( 1,  0)] +
+					 	    flux_t[id + int2( 0, -1)] +
+					        flux_b[id + int2( 0,  1)]));
+
+		water[id] = max(0, water[id] - evaporation * dt);
+	}
+
+	// Simulation of the erosion-deposition process
+
+	// Transportation of suspended sediment by the velocity ﬁeld
+
+	// Water evaporation
+}
+
+
+#pragma kernel Thermal
+
+float talus;
+float friction;
+
+[numthreads(16,16,1)]
+void Thermal (int2 id : SV_DispatchThreadID)
+{	
+	if (p==0){
+		// Calculate Outgoing Flux as float4(L,R,T,B)
+		float4 flux = float4(
+			max(0, flux_l[id] + dt * a * g * (terrain[id] - terrain[id + int2( 1,  0)] - talus) / l),
+			max(0, flux_r[id] + dt * a * g * (terrain[id] - terrain[id + int2(-1,  0)] - talus) / l),
+			max(0, flux_t[id] + dt * a * g * (terrain[id] - terrain[id + int2( 0,  1)] - talus) / l),
+			max(0, flux_b[id] + dt * a * g * (terrain[id] - terrain[id + int2( 0, -1)] - talus) / l)
+		);
+
+		float flux_sum = flux.x + flux.y + flux.z + flux.w;
+		if (flux_sum > soil[id]) flux = flux * soil[id] / flux_sum;
+
+		flux = max(0, flux - flux * friction * dt);
+
+		flux_l[id] = flux.x;
+		flux_r[id] = flux.y;
+		flux_t[id] = flux.z;
+		flux_b[id] = flux.w;
+	}
+	if (p==1){
+		// Update Soil
+		//	Outflow
+		soil[id] -= dt * (flux_l[id] + flux_r[id] + flux_t[id] + flux_b[id]);
+
+		//	Inflow
+		soil[id] += dt * ((flux_l[id + int2(-1,  0)] +
+						   flux_r[id + int2( 1,  0)] +
+					 	   flux_t[id + int2( 0, -1)] +
+					       flux_b[id + int2( 0,  1)]));
 
 		// Update terrain
 		terrain[id] = rock[id] + soil[id];

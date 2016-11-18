@@ -5,11 +5,10 @@ using UnityEditor;
 public class ProceduralTerrainEditor : Editor {
 	public override void OnInspectorGUI(){
 		DrawDefaultInspector();
-		if (GUILayout.Button("Update Map"))
-			((ProceduralTerrain)target).InitMap();
-		if (GUILayout.Button("Update Noise"))
-			((ProceduralTerrain)target).InitNoise();
-		if (GUILayout.Button("Update Erosion"))
-			((ProceduralTerrain)target).InitErosion();
+		ProceduralTerrain pt = (ProceduralTerrain)target;
+		
+		if (GUILayout.Button("Update Map")) pt.InitMap();
+		if (GUILayout.Button("Update Noise")) pt.InitNoise();
+		if (GUILayout.Button(pt.erosion_running ? "Stop Erosion" : "Start Erosion")) pt.ToggleErosion();
 	}
 }

@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections;
 
 public class ProceduralTerrain : MonoBehaviour {
 	private RenderTexture heightmap;
@@ -27,8 +28,13 @@ public class ProceduralTerrain : MonoBehaviour {
 	public float g;
 	public float pipeArea;
 	public float pipeLength;
-	public float amount;
-	public float talus;
+	public float rain;
+	public float evaporation;
+
+	private IEnumerator erosion;
+
+	[HideInInspector]
+	public bool erosion_running = false;
 
 	// Live Controls go Here
 	public void OnValidate() {
@@ -55,11 +61,23 @@ public class ProceduralTerrain : MonoBehaviour {
 	}
 
 	public void InitNoise() {
+		if (erosion != null && erosion_running){
+			StopCoroutine(erosion);
+			erosion_running = false;
+		}
 		Noise.Perlin(heightmap, octaves, scale, persistence);
 	}
 
-	public void InitErosion() {
-		StartCoroutine(new Erosion(dt, g, pipeArea, pipeLength).Thermal(heightmap, iterations, cycles, amount, talus));
+	public void ToggleErosion() {
+		if (erosion_running){
+			StopCoroutine(erosion);
+			erosion_running = false;
+		}
+		else{
+			erosion = new Erosion(iterations, cycles, dt, g, pipeArea, pipeLength).Hydraulic(heightmap, rain, evaporation);
+			StartCoroutine(erosion);
+			erosion_running = true;
+		}
 	}
 	
 	public void Start(){
